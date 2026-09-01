@@ -7,7 +7,7 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -15,6 +15,42 @@ jobs:
     steps:
       - name: Checkout WebHider 4.2
         uses: actions/checkout@v4
+
+      - name: Rebuild WebHider 4.2 from approved 4.1
+        run: |
+          set -euo pipefail
+          rm -rf WebHider-4.2
+          cp -R WebHider-4.1 WebHider-4.2
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('WebHider-4.2/Sources/PHV233FinalUI.m')
+          s = p.read_text()
+          # Preserve approved 4.1 GUI, removing only the previously approved card subtitles.
+          s = s.replace('        UILabel *copySub=P233Label(@"Copiar seletor\\ne XPath",[UIFont systemFontOfSize:13.5 weight:UIFontWeightRegular],P233C(@"#B0B4BC"));copySub.textAlignment=NSTextAlignmentCenter;[copyC addSubview:copySub];\n','')
+          s = s.replace('        UILabel *hiddenSub=P233Label(@"Ver elementos\\nocultos",[UIFont systemFontOfSize:13.5 weight:UIFontWeightRegular],P233C(@"#B0B4BC"));hiddenSub.textAlignment=NSTextAlignmentCenter;[hiddenC addSubview:hiddenSub];\n','')
+          s = s.replace('        UILabel *hideSub=P233Label(@"Ocultar este\\nelemento",[UIFont systemFontOfSize:13.5 weight:UIFontWeightRegular],P233C(@"#B0B4BC"));hideSub.textAlignment=NSTextAlignmentCenter;[hideC addSubview:hideSub];\n','')
+          s = s.replace('[copySub.topAnchor constraintEqualToAnchor:copyTitle.bottomAnchor constant:2],[copySub.leadingAnchor constraintEqualToAnchor:copyC.leadingAnchor constant:3],[copySub.trailingAnchor constraintEqualToAnchor:copyC.trailingAnchor constant:-3],[copySub.bottomAnchor constraintLessThanOrEqualToAnchor:copyC.bottomAnchor constant:-7],\n','')
+          s = s.replace('[hiddenSub.topAnchor constraintEqualToAnchor:hiddenTitle.bottomAnchor constant:2],[hiddenSub.leadingAnchor constraintEqualToAnchor:hiddenC.leadingAnchor constant:3],[hiddenSub.trailingAnchor constraintEqualToAnchor:hiddenC.trailingAnchor constant:-3],[hiddenSub.bottomAnchor constraintLessThanOrEqualToAnchor:hiddenC.bottomAnchor constant:-7],\n','')
+          s = s.replace('[hideSub.topAnchor constraintEqualToAnchor:hideTitle.bottomAnchor constant:2],[hideSub.leadingAnchor constraintEqualToAnchor:hideC.leadingAnchor constant:3],[hideSub.trailingAnchor constraintEqualToAnchor:hideC.trailingAnchor constant:-3],[hideSub.bottomAnchor constraintLessThanOrEqualToAnchor:hideC.bottomAnchor constant:-7],\n','')
+          # Approved compact-card height: 20% below the 4.1 height of 108px.
+          s = s.replace('[copyC.topAnchor constraintEqualToAnchor:seg.bottomAnchor constant:10]','[copyC.topAnchor constraintEqualToAnchor:seg.bottomAnchor constant:25]')
+          s = s.replace('[copyC.heightAnchor constraintEqualToConstant:108]','[copyC.heightAnchor constraintEqualToConstant:86.4]')
+          s = s.replace('[copyIcon.topAnchor constraintEqualToAnchor:copyC.topAnchor constant:13]','[copyIcon.topAnchor constraintEqualToAnchor:copyC.topAnchor constant:10]')
+          s = s.replace('[hiddenIcon.topAnchor constraintEqualToAnchor:hiddenC.topAnchor constant:13]','[hiddenIcon.topAnchor constraintEqualToAnchor:hiddenC.topAnchor constant:10]')
+          s = s.replace('[hideIcon.topAnchor constraintEqualToAnchor:hideC.topAnchor constant:13]','[hideIcon.topAnchor constraintEqualToAnchor:hideC.topAnchor constant:10]')
+          # Exactly 25px below the action-card row before the footer.
+          s = s.replace('[close.topAnchor constraintEqualToAnchor:copyC.bottomAnchor constant:12]','[close.topAnchor constraintEqualToAnchor:copyC.bottomAnchor constant:25]')
+          s = s.replace('[save.topAnchor constraintEqualToAnchor:copyC.bottomAnchor constant:12]','[save.topAnchor constraintEqualToAnchor:copyC.bottomAnchor constant:25]')
+          # Keep the 42px footer buttons unchanged; expand only the panel enough to preserve all requested spacing.
+          s = s.replace('[panel.widthAnchor constraintEqualToConstant:350],[panel.heightAnchor constraintEqualToConstant:520]','[panel.widthAnchor constraintEqualToConstant:350],[panel.heightAnchor constraintEqualToConstant:548.4]')
+          p.write_text(s)
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add WebHider-4.2
+          git commit -m "Prepare corrected WebHider 4.2" || true
+          git push
 
       - name: Setup Theos
         uses: waruhachi/theos-action@v2.4.6
