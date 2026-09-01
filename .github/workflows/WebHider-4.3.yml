@@ -2,12 +2,16 @@ name: WebHider 4.3 Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Trigger WebHider 4.3 build'
     runs-on: macos-14
     steps:
       - name: Checkout WebHider 4.3
@@ -52,7 +56,7 @@ jobs:
           p.write_text(s)
           PY
 
-          # Verify that only the requested GUI constants changed in this version.
+          # Verify the requested GUI geometry before building.
           grep -q 'copyC.topAnchor constraintEqualToAnchor:seg.bottomAnchor constant:12' WebHider-4.3/Sources/PHV233FinalUI.m
           grep -q 'copyC.heightAnchor constraintEqualToConstant:80' WebHider-4.3/Sources/PHV233FinalUI.m
           grep -q 'copyIcon.topAnchor constraintEqualToAnchor:copyC.topAnchor constant:13' WebHider-4.3/Sources/PHV233FinalUI.m
