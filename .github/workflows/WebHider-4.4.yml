@@ -25,10 +25,8 @@ jobs:
           from pathlib import Path
           p = Path('WebHider-4.4/Sources/PHV233FinalUI.m')
           s = p.read_text()
-          marker = '@interface PHInspectorViewController : UIViewController\n'
           if 'PHV44Haptics' in s:
               raise SystemExit('4.4 haptics already present')
-          s = s.replace(marker, marker, 1)
           s = s.replace('[copy addTarget:vc action:@selector(copyTapped) forControlEvents:UIControlEventTouchUpInside];[copyC addSubview:copy];', '[copy addTarget:vc action:@selector(copyTapped) forControlEvents:UIControlEventTouchUpInside];[copy addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[copyC addSubview:copy];')
           s = s.replace('[hidden addTarget:vc action:@selector(hiddenTapped) forControlEvents:UIControlEventTouchUpInside];[hiddenC addSubview:hidden];', '[hidden addTarget:vc action:@selector(hiddenTapped) forControlEvents:UIControlEventTouchUpInside];[hidden addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[hiddenC addSubview:hidden];')
           s = s.replace('[hide addTarget:vc action:@selector(hideTapped) forControlEvents:UIControlEventTouchUpInside];[hideC addSubview:hide];', '[hide addTarget:vc action:@selector(hideTapped) forControlEvents:UIControlEventTouchUpInside];[hide addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[hideC addSubview:hide];')
