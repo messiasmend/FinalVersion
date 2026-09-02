@@ -31,15 +31,10 @@ static NSString *PH47CustomFiltersPath(void) {
 static NSString *PH47AppName(void) {
     NSBundle *bundle = NSBundle.mainBundle;
     NSString *name = [bundle objectForInfoDictionaryKey:@"CFBundleDisplayName"];
-    if (![name isKindOfClass:NSString.class] || !name.length) {
-        name = [bundle objectForInfoDictionaryKey:@"CFBundleName"];
-    }
-    if (![name isKindOfClass:NSString.class] || !name.length) {
-        name = NSProcessInfo.processInfo.processName;
-    }
+    if (![name isKindOfClass:NSString.class] || !name.length) name = [bundle objectForInfoDictionaryKey:@"CFBundleName"];
+    if (![name isKindOfClass:NSString.class] || !name.length) name = NSProcessInfo.processInfo.processName;
     if (![name isKindOfClass:NSString.class] || !name.length) name = @"App";
-
-    NSCharacterSet *unsafe = [NSCharacterSet characterSetWithCharactersInString:@"/:\\\\\n\r\t"];
+    NSCharacterSet *unsafe = [NSCharacterSet characterSetWithCharactersInString:@"/:\\\n\r\t"];
     name = [[name componentsSeparatedByCharactersInSet:unsafe] componentsJoinedByString:@"_"];
     name = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     return name.length ? name : @"App";
@@ -77,16 +72,13 @@ static NSString *PH47String(id value, NSUInteger limit) {
 static NSString *PH47NameForElement(NSDictionary *element) {
     NSString *tag = [PH47String(element[@"tag"], 80) lowercaseString];
     if ([tag isEqualToString:@"lottie-player"]) return @"Lottie Player";
-
     NSArray<NSString *> *keys = @[@"ariaLabel", @"text", @"title", @"id", @"className", @"tag"];
     for (NSString *key in keys) {
-        NSString *value = PH47String(element[key], key.length > 0 && [key isEqualToString:@"text"] ? 120 : 100);
+        NSString *value = PH47String(element[key], [key isEqualToString:@"text"] ? 120 : 100);
         if (value.length) {
             if ([key isEqualToString:@"className"] && [value rangeOfString:@" "].location != NSNotFound) {
                 NSArray *classes = [value componentsSeparatedByString:@" "];
-                for (NSString *cls in classes) {
-                    if (cls.length) return [NSString stringWithFormat:@".%@", cls];
-                }
+                for (NSString *cls in classes) if (cls.length) return [NSString stringWithFormat:@".%@", cls];
             }
             return value;
         }
@@ -128,7 +120,6 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
         if (![element isKindOfClass:NSDictionary.class]) return;
         NSString *selector = PH47String(element[@"selector"], 1000);
         if (!selector.length) return;
-
         NSMutableDictionary *record = [NSMutableDictionary dictionary];
         record[@"name"] = PH47NameForElement(element);
         record[@"selector"] = selector;
@@ -149,18 +140,29 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
         NSString *selector = PH47FilterSelector(filter);
         if (selector.length) [activeSelectors addObject:selector];
     }
-
     NSMutableDictionary *elements = [PH47LoadMetadata() mutableCopy];
     [PH47PendingMetadata() enumerateKeysAndObjectsUsingBlock:^(NSString *selector, NSDictionary *record, BOOL *stop) {
-        if ([activeSelectors containsObject:selector]) elements[selector] = record;
+        if ([activeSelectors containsObject:selector]) {
+            elements[selector] = record;
+        } else {
+            NSString *recordClassName = PH47String(record[@"className"], 300);
+            NSString *recordID = PH47String(record[@"id"], 160);
+            NSString *recordSelector = PH47String(record[@"selector"], 1000);
+            for (NSString *active in activeSelectors) {
+                BOOL classMatch = [active hasPrefix:@"."] && [[recordClassName componentsSeparatedByString:@" "] containsObject:[active substringFromIndex:1]];
+                BOOL idMatch = [active hasPrefix:@"#"] && [recordID isEqualToString:[active substringFromIndex:1]];
+                if (classMatch || idMatch || [active isEqualToString:recordSelector]) {
+                    elements[active] = record;
+                    break;
+                }
+            }
+        }
     }];
-
     NSArray *staleKeys = [elements.allKeys filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSString *key, NSDictionary *bindings) {
         return ![activeSelectors containsObject:key];
     }]];
     [elements removeObjectsForKeys:staleKeys];
     PH47WriteMetadata(elements);
-
     [PH47PendingMetadata() removeAllObjects];
 }
 
@@ -171,7 +173,21 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
     if (name.length) return name;
     NSDictionary *saved = PH47LoadMetadata()[selector];
     name = PH47String(saved[@"name"], 100);
-    return name.length ? name : nil;
+    if (name.length) return name;
+    if ([selector hasPrefix:@"."] || [selector hasPrefix:@"#"]) {
+        NSString *needle = [selector substringFromIndex:1];
+        NSDictionary *all = PH47LoadMetadata();
+        for (NSString *key in all) {
+            NSDictionary *record = all[key];
+            if ([selector hasPrefix:@"."]) {
+                NSString *classes = PH47String(record[@"className"], 300);
+                if ([[classes componentsSeparatedByString:@" "] containsObject:needle]) return PH47String(record[@"name"], 100);
+            } else if ([selector hasPrefix:@"#"] && [PH47String(record[@"id"], 160) isEqualToString:needle]) {
+                return PH47String(record[@"name"], 100);
+            }
+        }
+    }
+    return nil;
 }
 
 @end
