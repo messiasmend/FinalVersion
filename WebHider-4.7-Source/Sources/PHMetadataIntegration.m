@@ -19,7 +19,18 @@
 
 - (void)ph47_savePendingFilters {
     [self ph47_savePendingFilters];
-    [PHMetadataStore synchronizeWithFilters];
+
+    // The element metadata is captured through WKWebView asynchronously.
+    // The original save operation remains untouched; synchronization is
+    // retried briefly so the metadata callback has time to populate pending.
+    NSArray<NSNumber *> *delays = @[@0.25, @0.75, @1.50];
+    for (NSNumber *delay in delays) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay.doubleValue * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if ([PHMetadataStore hasPendingMetadata]) {
+                [PHMetadataStore synchronizeWithFilters];
+            }
+        });
+    }
 }
 
 @end
