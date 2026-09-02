@@ -1,0 +1,59 @@
+name: WebHider 4.5 Clean Test
+
+on:
+  push:
+    branches:
+      - webhider-4.5-clean-test2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare clean test from 4.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf WebHider-4.5
+          cp -R WebHider-4.3 WebHider-4.5
+          rm -f WebHider-4.5/Sources/PHVisualStyle23.m
+          sed -i '' '/Sources\/PHVisualStyle23\.m/d' WebHider-4.5/Makefile
+
+      - name: Setup Theos
+        uses: waruhachi/theos-action@v2.4.6
+        with:
+          theos-src: theos/theos
+          theos-branch: master
+          sdks-src: theos/sdks
+          sdks-branch: master
+
+      - name: Build
+        working-directory: WebHider-4.5
+        shell: bash
+        run: |
+          set -euo pipefail
+          make clean package FINALPACKAGE=1
+
+      - name: Collect dylib
+        working-directory: WebHider-4.5
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          DYLIB=$(find .theos -type f -name '*.dylib' | head -n 1)
+          test -n "$DYLIB"
+          cp "$DYLIB" artifacts/WebHider-4.5-clean.dylib
+          test -s artifacts/WebHider-4.5-clean.dylib
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebHider-4.5-clean
+          path: WebHider-4.5/artifacts/WebHider-4.5-clean.dylib
+          if-no-files-found: error
