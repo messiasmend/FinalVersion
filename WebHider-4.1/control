@@ -1,9 +1,0 @@
-Package: com.messiasmend.webhider
-Name: WebHider
-Version: 2.3.8
-Architecture: iphoneos-arm64
-Description: WebFrame element hider with stable CSS selector saving and hidden-element management.
-Maintainer: Messias
-Author: Messias
-Section: Tweaks
-Depends: firmware (>= 14.0), mobilesubstrate
