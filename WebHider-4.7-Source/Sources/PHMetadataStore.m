@@ -115,27 +115,41 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
 }
 
 + (void)captureSelectedElementFromWebView:(WKWebView *)webView {
-    if (!webView) return;
+    [self captureSelectedElementFromWebView:webView completion:nil];
+}
+
++ (void)captureSelectedElementFromWebView:(WKWebView *)webView completion:(void (^)(BOOL captured))completion {
+    if (!webView) {
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO); });
+        return;
+    }
+
     NSString *script = @"(function(){var e=document.querySelector('[data-projetoh-selected=\\\"1\\\"]');if(!e)return null;function p(n){if(n.id)return '#'+CSS.escape(n.id);var a=[];while(n&&n.nodeType===1&&n!==document.body){var q=n.parentElement;if(!q)break;var same=[...q.children].filter(function(c){return c.tagName===n.tagName;});a.unshift(n.tagName.toLowerCase()+':nth-of-type('+(same.indexOf(n)+1)+')');n=q;}return a.join(' > ');}return JSON.stringify({selector:p(e),tag:e.tagName.toLowerCase(),id:e.id||'',className:typeof e.className==='string'?e.className:'',text:(e.innerText||e.textContent||'').trim().replace(/\\s+/g,' ').slice(0,500),ariaLabel:e.getAttribute('aria-label')||'',title:e.getAttribute('title')||''});})()";
     [webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
-        if (error || ![result isKindOfClass:NSString.class]) return;
-        NSData *data = [(NSString *)result dataUsingEncoding:NSUTF8StringEncoding];
-        NSDictionary *element = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-        if (![element isKindOfClass:NSDictionary.class]) return;
-        NSString *selector = PH47String(element[@"selector"], 1000);
-        if (!selector.length) return;
-        NSMutableDictionary *record = [NSMutableDictionary dictionary];
-        record[@"name"] = PH47NameForElement(element);
-        record[@"selector"] = selector;
-        record[@"tag"] = PH47String(element[@"tag"], 80);
-        record[@"id"] = PH47String(element[@"id"], 160);
-        record[@"className"] = PH47String(element[@"className"], 300);
-        record[@"text"] = PH47String(element[@"text"], 500);
-        record[@"ariaLabel"] = PH47String(element[@"ariaLabel"], 200);
-        record[@"title"] = PH47String(element[@"title"], 200);
-        @synchronized (PH47PendingMetadata()) {
-            PH47PendingMetadata()[selector] = [record copy];
+        BOOL captured = NO;
+        if (!error && [result isKindOfClass:NSString.class]) {
+            NSData *data = [(NSString *)result dataUsingEncoding:NSUTF8StringEncoding];
+            NSDictionary *element = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+            if ([element isKindOfClass:NSDictionary.class]) {
+                NSString *selector = PH47String(element[@"selector"], 1000);
+                if (selector.length) {
+                    NSMutableDictionary *record = [NSMutableDictionary dictionary];
+                    record[@"name"] = PH47NameForElement(element);
+                    record[@"selector"] = selector;
+                    record[@"tag"] = PH47String(element[@"tag"], 80);
+                    record[@"id"] = PH47String(element[@"id"], 160);
+                    record[@"className"] = PH47String(element[@"className"], 300);
+                    record[@"text"] = PH47String(element[@"text"], 500);
+                    record[@"ariaLabel"] = PH47String(element[@"ariaLabel"], 200);
+                    record[@"title"] = PH47String(element[@"title"], 200);
+                    @synchronized (PH47PendingMetadata()) {
+                        PH47PendingMetadata()[selector] = [record copy];
+                    }
+                    captured = YES;
+                }
+            }
         }
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(captured); });
     }];
 }
 
@@ -149,7 +163,6 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
 
     NSMutableDictionary *elements = [NSMutableDictionary dictionary];
     NSDictionary *saved = PH47LoadMetadata();
-
     for (NSString *key in saved) {
         NSDictionary *record = saved[key];
         if ([activeSelectors containsObject:key]) {
