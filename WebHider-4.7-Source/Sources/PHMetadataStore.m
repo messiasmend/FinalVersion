@@ -21,9 +21,7 @@ static NSString *PH47CustomFiltersPath(void) {
                 break;
             }
         }
-        if (!cachedPath.length) {
-            cachedPath = [home stringByAppendingPathComponent:@"Documents/custom-filters.json"];
-        }
+        if (!cachedPath.length) cachedPath = [home stringByAppendingPathComponent:@"Documents/custom-filters.json"];
     });
     return cachedPath;
 }
@@ -110,6 +108,12 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
 
 @implementation PHMetadataStore
 
++ (BOOL)hasPendingMetadata {
+    @synchronized (PH47PendingMetadata()) {
+        return PH47PendingMetadata().count > 0;
+    }
+}
+
 + (void)captureSelectedElementFromWebView:(WKWebView *)webView {
     if (!webView) return;
     NSString *script = @"(function(){var e=document.querySelector('[data-projetoh-selected=\\\"1\\\"]');if(!e)return null;function p(n){if(n.id)return '#'+CSS.escape(n.id);var a=[];while(n&&n.nodeType===1&&n!==document.body){var q=n.parentElement;if(!q)break;var same=[...q.children].filter(function(c){return c.tagName===n.tagName;});a.unshift(n.tagName.toLowerCase()+':nth-of-type('+(same.indexOf(n)+1)+')');n=q;}return a.join(' > ');}return JSON.stringify({selector:p(e),tag:e.tagName.toLowerCase(),id:e.id||'',className:typeof e.className==='string'?e.className:'',text:(e.innerText||e.textContent||'').trim().replace(/\\s+/g,' ').slice(0,500),ariaLabel:e.getAttribute('aria-label')||'',title:e.getAttribute('title')||''});})()";
@@ -129,7 +133,9 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
         record[@"text"] = PH47String(element[@"text"], 500);
         record[@"ariaLabel"] = PH47String(element[@"ariaLabel"], 200);
         record[@"title"] = PH47String(element[@"title"], 200);
-        PH47PendingMetadata()[selector] = [record copy];
+        @synchronized (PH47PendingMetadata()) {
+            PH47PendingMetadata()[selector] = [record copy];
+        }
     }];
 }
 
@@ -140,35 +146,52 @@ static NSString *PH47FilterSelector(NSDictionary *filter) {
         NSString *selector = PH47FilterSelector(filter);
         if (selector.length) [activeSelectors addObject:selector];
     }
-    NSMutableDictionary *elements = [PH47LoadMetadata() mutableCopy];
-    [PH47PendingMetadata() enumerateKeysAndObjectsUsingBlock:^(NSString *selector, NSDictionary *record, BOOL *stop) {
-        if ([activeSelectors containsObject:selector]) {
-            elements[selector] = record;
-        } else {
-            NSString *recordClassName = PH47String(record[@"className"], 300);
-            NSString *recordID = PH47String(record[@"id"], 160);
-            NSString *recordSelector = PH47String(record[@"selector"], 1000);
-            for (NSString *active in activeSelectors) {
-                BOOL classMatch = [active hasPrefix:@"."] && [[recordClassName componentsSeparatedByString:@" "] containsObject:[active substringFromIndex:1]];
-                BOOL idMatch = [active hasPrefix:@"#"] && [recordID isEqualToString:[active substringFromIndex:1]];
-                if (classMatch || idMatch || [active isEqualToString:recordSelector]) {
-                    elements[active] = record;
-                    break;
+
+    NSMutableDictionary *elements = [NSMutableDictionary dictionary];
+    NSDictionary *saved = PH47LoadMetadata();
+
+    for (NSString *key in saved) {
+        NSDictionary *record = saved[key];
+        if ([activeSelectors containsObject:key]) {
+            elements[key] = record;
+            continue;
+        }
+        NSString *recordSelector = PH47String(record[@"selector"], 1000);
+        if (recordSelector.length && [activeSelectors containsObject:recordSelector]) {
+            elements[recordSelector] = record;
+        }
+    }
+
+    @synchronized (PH47PendingMetadata()) {
+        [PH47PendingMetadata() enumerateKeysAndObjectsUsingBlock:^(NSString *selector, NSDictionary *record, BOOL *stop) {
+            if ([activeSelectors containsObject:selector]) {
+                elements[selector] = record;
+            } else {
+                NSString *recordClassName = PH47String(record[@"className"], 300);
+                NSString *recordID = PH47String(record[@"id"], 160);
+                NSString *recordSelector = PH47String(record[@"selector"], 1000);
+                for (NSString *active in activeSelectors) {
+                    BOOL classMatch = [active hasPrefix:@"."] && [[recordClassName componentsSeparatedByString:@" "] containsObject:[active substringFromIndex:1]];
+                    BOOL idMatch = [active hasPrefix:@"#"] && [recordID isEqualToString:[active substringFromIndex:1]];
+                    if (classMatch || idMatch || [active isEqualToString:recordSelector]) {
+                        elements[active] = record;
+                        break;
+                    }
                 }
             }
-        }
-    }];
-    NSArray *staleKeys = [elements.allKeys filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSString *key, NSDictionary *bindings) {
-        return ![activeSelectors containsObject:key];
-    }]];
-    [elements removeObjectsForKeys:staleKeys];
+        }];
+        [PH47PendingMetadata() removeAllObjects];
+    }
+
     PH47WriteMetadata(elements);
-    [PH47PendingMetadata() removeAllObjects];
 }
 
 + (NSString *)nameForSelector:(NSString *)selector {
     if (!selector.length) return nil;
-    NSDictionary *pending = PH47PendingMetadata()[selector];
+    NSDictionary *pending;
+    @synchronized (PH47PendingMetadata()) {
+        pending = PH47PendingMetadata()[selector];
+    }
     NSString *name = PH47String(pending[@"name"], 100);
     if (name.length) return name;
     NSDictionary *saved = PH47LoadMetadata()[selector];
