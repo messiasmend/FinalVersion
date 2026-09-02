@@ -46,9 +46,22 @@ jobs:
           cp "$DYLIB" artifacts/WebHider-4.7.dylib
           test -s artifacts/WebHider-4.7.dylib
 
+      - name: Package WebHider 4.7 source
+        run: |
+          set -euo pipefail
+          zip -r WebHider-4.7-Source.zip WebHider-4.7-Source -x 'WebHider-4.7-Source/.theos/*'
+          test -s WebHider-4.7-Source.zip
+
       - name: Upload WebHider 4.7 dylib
         uses: actions/upload-artifact@v4
         with:
           name: WebHider-4.7
           path: WebHider-4.7-Source/artifacts/WebHider-4.7.dylib
+          if-no-files-found: error
+
+      - name: Upload WebHider 4.7 source
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebHider-4.7-Source
+          path: WebHider-4.7-Source.zip
           if-no-files-found: error
