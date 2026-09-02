@@ -1,0 +1,99 @@
+name: WebHider 4.5 Cleanup Test
+
+on:
+  push:
+    branches:
+      - webhider-4.5-cleanup
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout cleanup branch
+        uses: actions/checkout@v4
+
+      - name: Prepare WebHider 4.5 from approved 4.4 behavior
+        run: |
+          set -euo pipefail
+          rm -rf WebHider-4.5
+          cp -R WebHider-4.3 WebHider-4.5
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('WebHider-4.5')
+          makefile = root / 'Makefile'
+          s = makefile.read_text()
+          s = s.replace('    Sources/PHVisualStyle23.m \\\n', '')
+          makefile.write_text(s)
+
+          visual = root / 'Sources/PHVisualStyle23.m'
+          visual.unlink()
+
+          p = root / 'Sources/PHV233FinalUI.m'
+          s = p.read_text()
+          if 'PHV44Haptics' in s:
+              raise SystemExit('unexpected existing haptics')
+          s = s.replace('[copy addTarget:vc action:@selector(copyTapped) forControlEvents:UIControlEventTouchUpInside];[copyC addSubview:copy];', '[copy addTarget:vc action:@selector(copyTapped) forControlEvents:UIControlEventTouchUpInside];[copy addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[copyC addSubview:copy];')
+          s = s.replace('[hidden addTarget:vc action:@selector(hiddenTapped) forControlEvents:UIControlEventTouchUpInside];[hiddenC addSubview:hidden];', '[hidden addTarget:vc action:@selector(hiddenTapped) forControlEvents:UIControlEventTouchUpInside];[hidden addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[hiddenC addSubview:hidden];')
+          s = s.replace('[hide addTarget:vc action:@selector(hideTapped) forControlEvents:UIControlEventTouchUpInside];[hideC addSubview:hide];', '[hide addTarget:vc action:@selector(hideTapped) forControlEvents:UIControlEventTouchUpInside];[hide addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[hideC addSubview:hide];')
+          s += '''
+
+@interface PHInspectorViewController (PHV44Haptics)
+- (void)phv44_hapticButtonTapped:(UIButton *)sender;
+@end
+
+@implementation PHInspectorViewController (PHV44Haptics)
+- (void)phv44_hapticButtonTapped:(UIButton *)sender {
+    if (@available(iOS 10.0, *)) {
+        UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [feedback prepare];
+        [feedback impactOccurred];
+    }
+}
+@end
+'''
+          p.write_text(s)
+          PY
+
+      - name: Verify cleanup delta
+        working-directory: WebHider-4.5
+        run: |
+          set -euo pipefail
+          test ! -f Sources/PHVisualStyle23.m
+          ! grep -q 'Sources/PHVisualStyle23.m' Makefile
+          grep -q 'PHV44Haptics' Sources/PHV233FinalUI.m
+
+      - name: Setup Theos
+        uses: waruhachi/theos-action@v2.4.6
+        with:
+          theos-src: theos/theos
+          theos-branch: master
+          sdks-src: theos/sdks
+          sdks-branch: master
+
+      - name: Build WebHider 4.5 cleanup
+        working-directory: WebHider-4.5
+        run: |
+          set -euo pipefail
+          make clean package FINALPACKAGE=1
+
+      - name: Collect dylib
+        working-directory: WebHider-4.5
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          DYLIB=$(find .theos -type f -name '*.dylib' | head -n 1)
+          test -n "$DYLIB"
+          cp "$DYLIB" artifacts/WebHider-4.5-cleanup.dylib
+          test -s artifacts/WebHider-4.5-cleanup.dylib
+
+      - name: Upload cleanup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebHider-4.5-cleanup
+          path: WebHider-4.5/artifacts/WebHider-4.5-cleanup.dylib
+          if-no-files-found: error
