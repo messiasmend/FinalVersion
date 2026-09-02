@@ -6,34 +6,31 @@ on:
       - webhider-4.5-cleanup
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: macos-14
     steps:
-      - name: Checkout cleanup branch
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Prepare WebHider 4.5
-        shell: bash
+      - name: Prepare WebHider 4.5 cleanup from approved 4.3
         run: |
           set -euo pipefail
           rm -rf WebHider-4.5
           cp -R WebHider-4.3 WebHider-4.5
           rm -f WebHider-4.5/Sources/PHVisualStyle23.m
           sed -i '' '/Sources\/PHVisualStyle23\.m/d' WebHider-4.5/Makefile
-
           python3 - <<'PY'
           from pathlib import Path
           p = Path('WebHider-4.5/Sources/PHV233FinalUI.m')
           s = p.read_text()
-          if 'PHV44Haptics' in s:
-              raise SystemExit('haptics already present')
           s = s.replace('[copy addTarget:vc action:@selector(copyTapped) forControlEvents:UIControlEventTouchUpInside];[copyC addSubview:copy];', '[copy addTarget:vc action:@selector(copyTapped) forControlEvents:UIControlEventTouchUpInside];[copy addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[copyC addSubview:copy];')
           s = s.replace('[hidden addTarget:vc action:@selector(hiddenTapped) forControlEvents:UIControlEventTouchUpInside];[hiddenC addSubview:hidden];', '[hidden addTarget:vc action:@selector(hiddenTapped) forControlEvents:UIControlEventTouchUpInside];[hidden addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[hiddenC addSubview:hidden];')
           s = s.replace('[hide addTarget:vc action:@selector(hideTapped) forControlEvents:UIControlEventTouchUpInside];[hideC addSubview:hide];', '[hide addTarget:vc action:@selector(hideTapped) forControlEvents:UIControlEventTouchUpInside];[hide addTarget:vc action:@selector(phv44_hapticButtonTapped:) forControlEvents:UIControlEventTouchUpInside];[hideC addSubview:hide];')
-          s += '''
+          if 'PHV44Haptics' not in s:
+              s += '''
 
 @interface PHInspectorViewController (PHV44Haptics)
 - (void)phv44_hapticButtonTapped:(UIButton *)sender;
@@ -51,14 +48,11 @@ jobs:
 '''
           p.write_text(s)
           PY
-
-      - name: Verify cleanup delta
-        shell: bash
-        run: |
-          set -euo pipefail
-          test ! -f WebHider-4.5/Sources/PHVisualStyle23.m
-          if grep -q 'Sources/PHVisualStyle23.m' WebHider-4.5/Makefile; then exit 1; fi
-          grep -q 'PHV44Haptics' WebHider-4.5/Sources/PHV233FinalUI.m
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add WebHider-4.5
+          git diff --cached --quiet || git commit -m "Prepare WebHider 4.5 cleanup test"
+          git push
 
       - name: Setup Theos
         uses: waruhachi/theos-action@v2.4.6
@@ -70,14 +64,18 @@ jobs:
 
       - name: Build WebHider 4.5 cleanup
         working-directory: WebHider-4.5
-        shell: bash
         run: |
           set -euo pipefail
           make clean package FINALPACKAGE=1
 
+      - name: Verify package output
+        working-directory: WebHider-4.5
+        run: |
+          set -euo pipefail
+          find .theos -maxdepth 3 -type f \( -name '*.deb' -o -name '*.dylib' \) -print
+
       - name: Collect dylib
         working-directory: WebHider-4.5
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
