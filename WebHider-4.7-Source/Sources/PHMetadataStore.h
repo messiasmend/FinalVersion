@@ -7,6 +7,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)captureSelectedElementFromWebView:(WKWebView *)webView;
 + (void)synchronizeWithFilters;
++ (BOOL)hasPendingMetadata;
 + (nullable NSString *)nameForSelector:(NSString *)selector;
 
 @end
