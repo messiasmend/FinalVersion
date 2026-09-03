@@ -12,6 +12,11 @@ jobs:
     steps:
       - name: Checkout WebHider 4.8 source
         uses: actions/checkout@v4
+      - name: Prepare WebHider 4.8 source
+        run: |
+          set -euo pipefail
+          rm -rf WebHider-4.8-Source
+          cp -R WebHider-4.6-Source WebHider-4.8-Source
       - name: Setup Theos
         uses: waruhachi/theos-action@v2.4.6
         with:
