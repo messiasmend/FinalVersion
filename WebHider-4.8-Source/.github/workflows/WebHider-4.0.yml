@@ -1,0 +1,54 @@
+name: WebHider 4.0 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout WebHider 4.0
+        uses: actions/checkout@v4
+
+      - name: Setup Theos
+        uses: waruhachi/theos-action@v2.4.6
+        with:
+          theos-src: theos/theos
+          theos-branch: master
+          sdks-src: theos/sdks
+          sdks-branch: master
+
+      - name: Build WebHider 4.0
+        working-directory: WebHider-4.0
+        run: |
+          set -euo pipefail
+          make clean package FINALPACKAGE=1
+
+      - name: Verify package output
+        working-directory: WebHider-4.0
+        run: |
+          set -euo pipefail
+          find .theos -maxdepth 3 -type f \( -name '*.deb' -o -name '*.dylib' \) -print
+
+      - name: Collect dylib
+        working-directory: WebHider-4.0
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          DYLIB=$(find .theos -type f -name '*.dylib' | head -n 1)
+          test -n "$DYLIB"
+          cp "$DYLIB" artifacts/WebHider-4.0.dylib
+          test -s artifacts/WebHider-4.0.dylib
+
+      - name: Upload WebHider 4.0
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebHider-4.0
+          path: WebHider-4.0/artifacts/WebHider-4.0.dylib
+          if-no-files-found: error
